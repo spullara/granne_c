@@ -1,0 +1,16 @@
+[package]
+name = "granne_c"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+granne = "0.5.2"
+safer-ffi = { version = "*", features = ["proc_macros"] }
+lazy_static = "1.4.0"
+
+[lib]
+name = "granne_c"
+crate-type = ["staticlib"]
+
+[features]
+c-headers = ["safer-ffi/headers"]
