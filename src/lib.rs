@@ -1,15 +1,17 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::os::raw::{c_char};
-use std::ffi::{CStr};
-use ::safer_ffi::prelude::*;
-use granne::{angular, BuildConfig, Builder, GranneBuilder, Index, Writeable};
-use angular::Vector;
-use std::slice;
-use granne::angular::Vectors;
-
 #[macro_use]
 extern crate lazy_static;
+
+use std::collections::HashMap;
+use std::ffi::CStr;
+use std::os::raw::c_char;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::slice;
+use std::sync::Mutex;
+
+use ::safer_ffi::prelude::*;
+use angular::Vector;
+use granne::{angular, BuildConfig, Builder, GranneBuilder, Index, Writeable};
+use granne::angular::Vectors;
 
 lazy_static! {
     static ref ANN_INDEX_MANAGER: Mutex<HashMap<String, Box<GranneBuilder<granne::angular::Vectors<'static>>>>> = Mutex::new(HashMap::new());
@@ -39,7 +41,7 @@ pub extern fn granne_new_index(
 pub extern fn granne_add(
     name: *const c_char,
     features: *const f32,
-    dimension: usize
+    dimension: usize,
 ) -> usize {
     let idx_name: String = cchar_to_string(name);
     let data_slice = unsafe { slice::from_raw_parts(features as *const f32, dimension) };
@@ -64,8 +66,7 @@ pub extern fn granne_build(
         Some(index) => {
             index.build();
         }
-        None => {
-        }
+        None => {}
     }
 }
 
@@ -74,7 +75,7 @@ pub extern fn granne_search(
     name: *const c_char,
     k: usize,
     features: *const f32,
-    dimension: usize
+    dimension: usize,
 ) -> repr_c::Vec<usize> {
     let idx_name: String = cchar_to_string(name);
     let data_slice = unsafe { slice::from_raw_parts(features, dimension) };
@@ -83,7 +84,7 @@ pub extern fn granne_search(
 
     let mut result: Vec<usize> = vec![];
     if let Some(index) = ANN_INDEX_MANAGER.lock().unwrap().get(&idx_name) {
-        index.get_index().search(&Vector::from(buf), topk, 100).iter().for_each( |x| {
+        index.get_index().search(&Vector::from(buf), topk, 100).iter().for_each(|x| {
             result.push(x.0)
         })
     }
@@ -95,21 +96,23 @@ pub extern fn granne_save(
     name: *const c_char,
     _index_filename: *const c_char,
     _elements_filename: *const c_char,
-) {
-    let idx_name = cchar_to_string(name);
-    let index_filename = cchar_to_string(_index_filename);
-    let elements_filename = cchar_to_string(_elements_filename);
-    let mut index_file = std::fs::File::create(index_filename).unwrap();
-    let mut element_file = std::fs::File::create(elements_filename).unwrap();
+) -> bool {
+    result_handler(|| {
+        let idx_name = cchar_to_string(name);
+        let index_filename = cchar_to_string(_index_filename);
+        let elements_filename = cchar_to_string(_elements_filename);
+        let mut index_file = std::fs::File::create(index_filename)?;
+        let mut element_file = std::fs::File::create(elements_filename)?;
 
-    match &mut ANN_INDEX_MANAGER.lock().unwrap().get_mut(&idx_name) {
-        Some(index) => {
-            index.write_index(&mut index_file).unwrap();
-            index.get_elements().write(&mut element_file).unwrap();
+        match &mut ANN_INDEX_MANAGER.lock().unwrap().get_mut(&idx_name) {
+            Some(index) => {
+                index.write_index(&mut index_file)?;
+                index.get_elements().write(&mut element_file)?;
+            }
+            None => {}
         }
-        None => {
-        }
-    }
+        Ok(())
+    })
 }
 
 #[ffi_export]
@@ -117,19 +120,40 @@ pub extern fn granne_load(
     name: *const c_char,
     _index_filename: *const c_char,
     _elements_filename: *const c_char,
-) {
-    let idx_name = cchar_to_string(name);
-    let index_filename = cchar_to_string(_index_filename);
-    let index_file = std::fs::File::open(index_filename).unwrap();
-    let element_filename = cchar_to_string(_elements_filename);
-    let element_file = std::fs::File::open(element_filename).unwrap();
-    let elements = unsafe { Vectors::from_file(&element_file) }.unwrap();
+) -> bool {
+    result_handler(|| {
+        let idx_name = cchar_to_string(name);
+        let index_filename = cchar_to_string(_index_filename);
+        let index_file = std::fs::File::open(index_filename)?;
+        let element_filename = cchar_to_string(_elements_filename);
+        let element_file = std::fs::File::open(element_filename)?;
+        let elements = unsafe { Vectors::from_file(&element_file) }?;
 
-    ANN_INDEX_MANAGER.lock().unwrap().insert(
-        idx_name,
-        Box::new(GranneBuilder::from_file(BuildConfig::default(), &index_file, elements).unwrap()),
-    );
+        ANN_INDEX_MANAGER.lock().unwrap().insert(
+            idx_name,
+            Box::new(GranneBuilder::from_file(BuildConfig::default(), &index_file, elements).unwrap()),
+        );
+        Ok(())
+    })
+}
 
+fn result_handler<F>(f: F) -> bool where
+    F: Fn() -> Result<(), std::io::Error> {
+    match catch_unwind(AssertUnwindSafe(|| {
+        match f() {
+            Ok(()) => true,
+            Err(e) => {
+                println!("Error: {}", e);
+                false
+            }
+        }
+    })) {
+        Ok(b) => b,
+        Err(_e) => {
+            println!("panic!");
+            false
+        }
+    }
 }
 
 #[test]

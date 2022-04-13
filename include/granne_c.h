@@ -48,12 +48,15 @@ Vec_size_t granne_search (
     float const * features,
     size_t dimension);
 
-void granne_save (
+
+#include <stdbool.h>
+
+bool granne_save (
     int8_t const * name,
     int8_t const * _index_filename,
     int8_t const * _elements_filename);
 
-void granne_load (
+bool granne_load (
     int8_t const * name,
     int8_t const * _index_filename,
     int8_t const * _elements_filename);
