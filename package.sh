@@ -1,10 +1,21 @@
 #!/bin/bash
+set -xeuo pipefail
+
 cargo test --features c-headers -- generate_headers
-cargo build --release --target aarch64-apple-ios
-cargo build --release --target x86_64-apple-darwin
-cargo build --release --target aarch64-apple-darwin
-cargo build --release --target x86_64-apple-ios
-cargo build --release --target aarch64-apple-ios-sim
+
+TARGETS=(
+  'aarch64-apple-ios'
+  'x86_64-apple-darwin'
+  'aarch64-apple-darwin'
+  'x86_64-apple-ios'
+  'aarch64-apple-ios-sim'
+)
+for target in "${TARGETS[@]}"
+do
+  rustup target add $target
+  cargo build --release --target $target
+done
+
 lipo -create \
   target/x86_64-apple-darwin/release/libgranne_c.a \
   target/aarch64-apple-darwin/release/libgranne_c.a \
