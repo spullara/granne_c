@@ -29,20 +29,28 @@ size_t granne_add (
 void granne_build (
     int8_t const * name);
 
+typedef struct SearchResult {
+
+    size_t index;
+
+    float score;
+
+} SearchResult_t;
+
 /** \brief
  *  Same as [`Vec<T>`][`rust::Vec`], but with guaranteed `#[repr(C)]` layout
  */
-typedef struct Vec_size {
+typedef struct Vec_SearchResult {
 
-    size_t * ptr;
+    SearchResult_t * ptr;
 
     size_t len;
 
     size_t cap;
 
-} Vec_size_t;
+} Vec_SearchResult_t;
 
-Vec_size_t granne_search (
+Vec_SearchResult_t granne_search (
     int8_t const * name,
     size_t k,
     float const * features,

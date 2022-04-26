@@ -70,22 +70,30 @@ pub extern fn granne_build(
     }
 }
 
+#[derive_ReprC]
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct SearchResult {
+    index: usize,
+    score: f32
+}
+
 #[ffi_export]
 pub extern fn granne_search(
     name: *const c_char,
     k: usize,
     features: *const f32,
     dimension: usize,
-) -> repr_c::Vec<usize> {
+) -> repr_c::Vec<SearchResult> {
     let idx_name: String = cchar_to_string(name);
     let data_slice = unsafe { slice::from_raw_parts(features, dimension) };
     let buf = data_slice.to_vec();
     let topk = k;
 
-    let mut result: Vec<usize> = vec![];
+    let mut result: Vec<SearchResult> = vec![];
     if let Some(index) = ANN_INDEX_MANAGER.lock().unwrap().get(&idx_name) {
         index.get_index().search(&Vector::from(buf), topk, 100).iter().for_each(|x| {
-            result.push(x.0)
+            result.push(SearchResult { index: x.0, score: x.1})
         })
     }
     result.into()
